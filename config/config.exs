@@ -18,3 +18,6 @@ config :ethcule_poirot, Adapters.Api.Blockscout,
 config :ethcule_poirot, Adapters.Api.DissrupTheGraph,
   api_url: System.get_env("DISSRUP_THE_GRAPH_API_URL"),
   api_timeout: 120_000
+
+config :logger, :console,
+  level: :info

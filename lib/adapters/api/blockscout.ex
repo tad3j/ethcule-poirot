@@ -35,13 +35,15 @@ defmodule Adapters.Api.Blockscout do
   end
 
   @impl true
-  def transactions_for_address(eth_address) do
+  def transactions_for_address(eth_address, search_after) do
+    search_first = 15
+    Logger.debug("Query with: {\"eth_address\": \"#{eth_address}\", \"search_first\": #{search_first}, \"search_after\": \"#{search_after}\"}")
     Neuron.query(
       """
-        query($eth_address: AddressHash!) {
+        query($eth_address: AddressHash!, $search_first: Int, $search_after: String) {
           address(hash: $eth_address) {
             contractCode
-            transactions(last: 23, count: 23) {
+            transactions(first: $search_first, after: $search_after) {
               edges {
                 node {
                   hash
@@ -51,11 +53,15 @@ defmodule Adapters.Api.Blockscout do
                   status
                 }
               }
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
             }
           }
         }
       """,
-      %{eth_address: eth_address}
+      %{eth_address: eth_address, search_first: search_first, search_after: search_after}
     )
     |> parse_transactions(eth_address)
   end
@@ -84,6 +90,8 @@ defmodule Adapters.Api.Blockscout do
   defp parse_transactions({:ok, %Neuron.Response{body: body}}, eth_address) do
     transactions = body["data"]["address"]["transactions"]["edges"] || []
     contract_code = !!body["data"]["address"]["contractCode"]
+    end_cursor = body["data"]["address"]["transactions"]["pageInfo"]["endCursor"]
+    has_next_page = body["data"]["address"]["transactions"]["pageInfo"]["hasNextPage"]
 
     transactions_struct =
       Enum.map(
@@ -100,18 +108,27 @@ defmodule Adapters.Api.Blockscout do
     %Address{
       eth_address: eth_address,
       contract: contract_code,
-      transactions: transactions_struct
+      transactions: transactions_struct,
+      end_cursor: end_cursor,
+      has_next_page: has_next_page
     }
   end
 
   @spec parse_transactions({:error, any()}, String.t()) :: Address.t()
-  defp parse_transactions(_request_result, eth_address) do
-    Logger.warn("Failed ETH transactions for #{eth_address}")
+  defp parse_transactions(request_result, eth_address) do
+    case request_result do
+      {:error, error} ->
+        Logger.warn("Failed ETH transactions for #{eth_address}: #{inspect(error)}")
+
+      _ ->
+        Logger.debug("Successful ETH transactions for #{eth_address}")
+    end
 
     %Address{
       eth_address: eth_address,
       contract: false,
-      transactions: []
+      transactions: [],
+      has_next_page: false
     }
   end
 end
