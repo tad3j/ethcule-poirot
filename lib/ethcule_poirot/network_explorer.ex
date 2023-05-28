@@ -49,6 +49,7 @@ defmodule EthculePoirot.NetworkExplorer do
       Logger.info("Already explored #{eth_address}")
       {:noreply, state}
     else
+      Logger.debug("Queued #{eth_address}")
       new_known = MapSet.put(state.known, eth_address)
 
       {processes_count, new_remaining, new_exploring} =

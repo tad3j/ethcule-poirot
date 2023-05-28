@@ -36,19 +36,34 @@ defmodule EthculePoirot.AddressExplorer do
   end
 
   @impl true
-  def handle_info(:start, %{depth: depth} = state) do
-    state.eth_address
-    |> state.api_handler.transactions_for_address()
-    |> handle_transactions(depth)
-
+ def handle_info(:start, %{depth: depth} = state) do
+    search_after = nil
+    handle_info_loop(state, depth, search_after)
     NetworkExplorer.node_visited(state.eth_address)
-
     {:stop, :normal, state}
   end
 
-  @spec handle_transactions(Address.t(), pos_integer()) :: any()
+  defp handle_info_loop(state, depth, search_after) do
+    state.eth_address
+    |> state.api_handler.transactions_for_address(search_after)
+    |> handle_transactions(depth)
+    |> handle_next_page(state, depth, search_after)
+  end
+
+  @spec handle_next_page(Address.t(), any(), pos_integer(), String.t()) :: any()
+  defp handle_next_page(address_info, state, depth, search_after) do
+    if address_info.has_next_page do
+      state
+      |> handle_info_loop(depth, address_info.end_cursor)
+    else
+      Logger.debug("Last page for #{address_info.eth_address} reached (after #{search_after})")
+    end
+  end
+
+  @spec handle_transactions(Address.t(), pos_integer()) :: Address.t()
   defp handle_transactions(%{transactions: []} = address_info, _depth) do
     update_node_label(address_info.contract, address_info.eth_address)
+    address_info
   end
 
   defp handle_transactions(address_info, depth) do
@@ -61,6 +76,7 @@ defmodule EthculePoirot.AddressExplorer do
 
       NetworkExplorer.visit_node(next_address, depth - 1)
     end)
+    address_info
   end
 
   @spec update_node_label(true, String.t()) :: any()
